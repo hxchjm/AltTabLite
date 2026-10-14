@@ -17,6 +17,12 @@ struct SwitchEntry {
 }
 
 enum WindowEnumerator {
+    private struct WindowMetadata {
+        let bounds: CGRect
+        let layer: Int
+        let isOnScreen: Bool
+    }
+
     private typealias AXGetWindowFn = @convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError
 
     private static let axGetWindow: AXGetWindowFn? = {
@@ -33,11 +39,12 @@ enum WindowEnumerator {
 
     static func entries(for apps: [NSRunningApplication]) -> [SwitchEntry] {
         let zOrder = windowZOrder()
+        let metadata = windowMetadata()
         let fallbackBase = max(100_000, (zOrder.values.max() ?? 0) + 1)
         var ranked: [(entry: SwitchEntry, rank: Int)] = []
 
         for (appIndex, app) in apps.enumerated() {
-            let windows = entries(for: app)
+            let windows = entries(for: app, metadata: metadata)
             if windows.isEmpty {
                 let entry = SwitchEntry(app: app, axWindow: nil, title: app.localizedName ?? "?", windowID: nil)
                 ranked.append((entry, fallbackBase + appIndex * 1_000))
@@ -54,7 +61,7 @@ enum WindowEnumerator {
         return ranked.map { $0.entry }
     }
 
-    private static func entries(for app: NSRunningApplication) -> [SwitchEntry] {
+    private static func entries(for app: NSRunningApplication, metadata: [CGWindowID: WindowMetadata]) -> [SwitchEntry] {
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(axApp, 0.25)
 
@@ -70,13 +77,33 @@ enum WindowEnumerator {
             }
             var cgID = CGWindowID(0)
             let hasID = axGetWindow.map { $0(element, &cgID) == .success } ?? false
-            var title = stringAttribute(element, kAXTitleAttribute) ?? ""
-            if title.isEmpty {
-                title = app.localizedName ?? "?"
+            let rawTitle = stringAttribute(element, kAXTitleAttribute) ?? ""
+            let isMinimized = boolAttribute(element, kAXMinimizedAttribute) ?? false
+
+            if hasID, let window = metadata[cgID] {
+                guard window.layer == 0 else { continue }
+                guard isMinimized || (window.bounds.width >= 120 && window.bounds.height >= 80) else { continue }
+                guard !rawTitle.isEmpty || window.isOnScreen || isMinimized else { continue }
             }
+
+            let title = rawTitle.isEmpty ? app.localizedName ?? "?" : rawTitle
             entries.append(SwitchEntry(app: app, axWindow: element, title: title, windowID: hasID ? cgID : nil))
         }
         return entries
+    }
+
+    private static func windowMetadata() -> [CGWindowID: WindowMetadata] {
+        guard let list = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [:] }
+        var result: [CGWindowID: WindowMetadata] = [:]
+        for info in list {
+            guard let number = (info[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
+                  let layer = (info[kCGWindowLayer as String] as? NSNumber)?.intValue,
+                  let boundsDictionary = info[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: boundsDictionary as CFDictionary) else { continue }
+            let isOnScreen = (info[kCGWindowIsOnscreen as String] as? NSNumber)?.boolValue ?? false
+            result[CGWindowID(number)] = WindowMetadata(bounds: bounds, layer: layer, isOnScreen: isOnScreen)
+        }
+        return result
     }
 
     private static func windowZOrder() -> [CGWindowID: Int] {
@@ -96,5 +123,11 @@ enum WindowEnumerator {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
         return value as? String
+    }
+
+    private static func boolAttribute(_ element: AXUIElement, _ attribute: String) -> Bool? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
+        return value as? Bool
     }
 }
