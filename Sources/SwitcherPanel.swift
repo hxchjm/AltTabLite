@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 enum PanelSize: String, CaseIterable {
     case small, medium, large
@@ -32,11 +33,14 @@ final class SwitcherPanel {
     var onPick: ((Int) -> Void)?
 
     private let panel: NSPanel
+    private let container: NSView
     private let effectView: NSVisualEffectView
+    private let selectionView = SelectionView()
     private var rows: [RowView] = []
     private var currentKeys: [String] = []
 
     var size: PanelSize = .medium
+    var selectionAnimationEnabled = false
 
     private let padding: CGFloat = 14
     private let gap: CGFloat = 1
@@ -67,7 +71,7 @@ final class SwitcherPanel {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
 
-        let container = NSView(frame: initialRect)
+        container = NSView(frame: initialRect)
         container.wantsLayer = true
         container.layer?.backgroundColor = NSColor.clear.cgColor
         container.layer?.cornerRadius = cornerRadius
@@ -80,6 +84,8 @@ final class SwitcherPanel {
         effectView.maskImage = Self.roundedMask(radius: cornerRadius)
         effectView.autoresizingMask = [.width, .height]
 
+        selectionView.isHidden = true
+        effectView.addSubview(selectionView)
         container.addSubview(effectView)
         panel.contentView = container
     }
@@ -97,6 +103,7 @@ final class SwitcherPanel {
     }
 
     func show(entries: [SwitchEntry], selectedIndex: Int) {
+        let wasVisible = panel.isVisible
         let keys = entries.map { $0.key }
         if keys != currentKeys {
             rebuildRows(entries)
@@ -105,12 +112,32 @@ final class SwitcherPanel {
         for (index, row) in rows.enumerated() where index < entries.count {
             row.titleLabel.stringValue = entries[index].title
         }
-        relayout(count: entries.count, selectedIndex: selectedIndex)
+        relayout(count: entries.count, selectedIndex: selectedIndex, animated: wasVisible)
+
+        if wasVisible {
+            panel.orderFrontRegardless()
+            return
+        }
+
+        panel.alphaValue = 0
+        container.layer?.transform = CATransform3DMakeScale(0.98, 0.98, 1)
         panel.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.08
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1
+        }
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.08)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        container.layer?.transform = CATransform3DIdentity
+        CATransaction.commit()
     }
 
     func hide() {
         panel.orderOut(nil)
+        panel.alphaValue = 1
+        container.layer?.transform = CATransform3DIdentity
     }
 
     private func rebuildRows(_ entries: [SwitchEntry]) {
@@ -122,7 +149,7 @@ final class SwitcherPanel {
             row.imageView.image = entry.app.icon ?? NSImage(named: NSImage.applicationIconName)
             row.titleLabel.stringValue = entry.title
             row.onDown = { [weak self] in self?.rowClicked(at: index) }
-            effectView.addSubview(row)
+            effectView.addSubview(row, positioned: .above, relativeTo: selectionView)
             return row
         }
     }
@@ -131,7 +158,7 @@ final class SwitcherPanel {
         onPick?(index)
     }
 
-    private func relayout(count: Int, selectedIndex: Int) {
+    private func relayout(count: Int, selectedIndex: Int, animated: Bool) {
         guard let screen = activeScreen() else { return }
         let visible = screen.visibleFrame
         let itemCount = max(count, 1)
@@ -157,6 +184,7 @@ final class SwitcherPanel {
         let originY = visible.midY - panelHeight / 2
         panel.setFrame(NSRect(x: originX, y: originY, width: panelWidth, height: panelHeight), display: true)
 
+        var selectedFrame: NSRect?
         for (index, row) in rows.enumerated() {
             let position = index - top
             if position < 0 || position >= visibleRows {
@@ -167,8 +195,26 @@ final class SwitcherPanel {
             row.isHidden = false
             let rowY = panelHeight - padding - CGFloat(position + 1) * rowHeight - CGFloat(position) * gap
             row.frame = NSRect(x: padding, y: rowY, width: panelWidth - padding * 2, height: rowHeight)
-            row.applyLayout(iconSize: iconSize + 6, fontSize: fontSize+2)
-            row.isSelected = (index == selectedIndex)
+            row.applyLayout(iconSize: iconSize + 6, fontSize: fontSize + 2)
+            row.isSelected = index == selectedIndex
+            if row.isSelected {
+                selectedFrame = row.frame.insetBy(dx: 2, dy: 2)
+            }
+        }
+
+        guard let selectedFrame else {
+            selectionView.isHidden = true
+            return
+        }
+        if selectionView.isHidden || !animated || !selectionAnimationEnabled {
+            selectionView.frame = selectedFrame
+            selectionView.isHidden = false
+        } else {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.08
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                selectionView.animator().frame = selectedFrame
+            }
         }
     }
 
@@ -177,6 +223,23 @@ final class SwitcherPanel {
         return NSScreen.screens.first { $0.frame.contains(mouse) }
             ?? NSScreen.main
             ?? NSScreen.screens.first
+    }
+}
+
+private final class SelectionView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.85).cgColor
+        layer?.cornerRadius = 12
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
     }
 }
 
@@ -255,11 +318,8 @@ private final class RowView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 12, yRadius: 12)
-        if isSelected {
-            NSColor.controlAccentColor.withAlphaComponent(0.85).setFill()
-            path.fill()
-        } else if isHovered {
+        if isHovered && !isSelected {
+            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 12, yRadius: 12)
             NSColor.controlAccentColor.withAlphaComponent(0.12).setFill()
             path.fill()
         }

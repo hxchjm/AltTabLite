@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let saved = UserDefaults.standard.string(forKey: "panelSize"), let size = PanelSize(rawValue: saved) {
             panel.size = size
         }
+        panel.selectionAnimationEnabled = UserDefaults.standard.bool(forKey: "selectionAnimationEnabled")
         tapController = EventTapController(appList: appList, panel: panel)
         setupStatusItem()
 
@@ -60,6 +61,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sizeItem.submenu = sizeMenu
         menu.addItem(sizeItem)
 
+        let selectionAnimationItem = NSMenuItem(
+            title: "选中块滑动动画",
+            action: #selector(toggleSelectionAnimation(_:)),
+            keyEquivalent: ""
+        )
+        selectionAnimationItem.target = self
+        selectionAnimationItem.state = panel.selectionAnimationEnabled ? .on : .off
+        menu.addItem(selectionAnimationItem)
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "退出 AltTabLite", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.menu = menu
@@ -72,5 +82,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(preset.rawValue, forKey: "panelSize")
         sender.menu?.items.forEach { $0.state = ($0 === sender) ? .on : .off }
         log("panel size set to \(preset.rawValue) (icon: \(Int(preset.iconSize))pt, font: \(Int(preset.fontSize))pt)")
+    }
+
+    @objc private func toggleSelectionAnimation(_ sender: NSMenuItem) {
+        panel.selectionAnimationEnabled.toggle()
+        UserDefaults.standard.set(panel.selectionAnimationEnabled, forKey: "selectionAnimationEnabled")
+        sender.state = panel.selectionAnimationEnabled ? .on : .off
+        log("selection animation enabled=\(panel.selectionAnimationEnabled)")
     }
 }
