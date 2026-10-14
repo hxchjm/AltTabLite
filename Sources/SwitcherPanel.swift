@@ -167,7 +167,7 @@ final class SwitcherPanel {
             row.isHidden = false
             let rowY = panelHeight - padding - CGFloat(position + 1) * rowHeight - CGFloat(position) * gap
             row.frame = NSRect(x: padding, y: rowY, width: panelWidth - padding * 2, height: rowHeight)
-            row.applyLayout(iconSize: iconSize, fontSize: fontSize)
+            row.applyLayout(iconSize: iconSize + 6, fontSize: fontSize+2)
             row.isSelected = (index == selectedIndex)
         }
     }
