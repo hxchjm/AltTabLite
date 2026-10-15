@@ -131,11 +131,14 @@ final class EventTapController {
 
     private func handleScroll(_ event: CGEvent) -> Unmanaged<CGEvent>? {
         guard sessionActive, panel.style == .coverFlow else { return Unmanaged.passUnretained(event) }
-        let dx = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis2)
-        let dy = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
-        if dx != 0, abs(dx) >= abs(dy) {
-            // Content follows the fingers: swiping left brings later covers to the center.
-            panel.scrollCoverFlow(by: -CGFloat(dx))
+        let continuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
+        let dx = event.getDoubleValueField(continuous ? .scrollWheelEventPointDeltaAxis2 : .scrollWheelEventDeltaAxis2)
+        let dy = event.getDoubleValueField(continuous ? .scrollWheelEventPointDeltaAxis1 : .scrollWheelEventDeltaAxis1)
+        let delta = abs(dx) >= abs(dy) ? dx : dy
+        if delta != 0 {
+            // A wheel tick spans one cover (50 points), even when macOS reports only a small line delta.
+            let points: CGFloat = continuous ? -CGFloat(delta) : (delta > 0 ? -50 : 50)
+            panel.scrollCoverFlow(by: points, animated: !continuous)
             scheduleScrollSnap()
         }
         return nil

@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel.style = style
         }
         panel.selectionAnimationEnabled = UserDefaults.standard.bool(forKey: "selectionAnimationEnabled")
+        panel.coverFlowShowsAppName = UserDefaults.standard.bool(forKey: "coverFlowShowsAppName")
         tapController = EventTapController(appList: appList, panel: panel)
         setupStatusItem()
 
@@ -85,6 +86,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         selectionAnimationItem.state = panel.selectionAnimationEnabled ? .on : .off
         menu.addItem(selectionAnimationItem)
 
+        let appNameItem = NSMenuItem(
+            title: "Cover Flow 显示程序名",
+            action: #selector(toggleCoverFlowAppName(_:)),
+            keyEquivalent: ""
+        )
+        appNameItem.target = self
+        appNameItem.state = panel.coverFlowShowsAppName ? .on : .off
+        menu.addItem(appNameItem)
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "退出 AltTabLite", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.menu = menu
@@ -112,5 +122,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(panel.selectionAnimationEnabled, forKey: "selectionAnimationEnabled")
         sender.state = panel.selectionAnimationEnabled ? .on : .off
         log("selection animation enabled=\(panel.selectionAnimationEnabled)")
+    }
+
+    @objc private func toggleCoverFlowAppName(_ sender: NSMenuItem) {
+        panel.coverFlowShowsAppName.toggle()
+        UserDefaults.standard.set(panel.coverFlowShowsAppName, forKey: "coverFlowShowsAppName")
+        sender.state = panel.coverFlowShowsAppName ? .on : .off
+        log("cover flow shows app name=\(panel.coverFlowShowsAppName)")
     }
 }

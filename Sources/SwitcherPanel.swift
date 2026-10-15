@@ -42,6 +42,7 @@ final class SwitcherPanel {
     var size: PanelSize = .medium
     var style: PanelStyle = .list
     var selectionAnimationEnabled = false
+    var coverFlowShowsAppName = false
     private var coverFlowPanel: CoverFlowPanel?
 
     private let padding: CGFloat = 14
@@ -92,7 +93,7 @@ final class SwitcherPanel {
         panel.contentView = container
     }
 
-    private static func roundedMask(radius: CGFloat) -> NSImage {
+    static func roundedMask(radius: CGFloat) -> NSImage {
         let edge = radius * 2
         let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
             NSColor.black.setFill()
@@ -106,7 +107,7 @@ final class SwitcherPanel {
 
     func show(entries: [SwitchEntry], selectedIndex: Int) {
         if style == .coverFlow {
-            coverFlow().show(entries: entries, selectedIndex: selectedIndex, size: size)
+            coverFlow().show(entries: entries, selectedIndex: selectedIndex, size: size, showsAppName: coverFlowShowsAppName)
             return
         }
 
@@ -148,8 +149,8 @@ final class SwitcherPanel {
         container.layer?.transform = CATransform3DIdentity
     }
 
-    func scrollCoverFlow(by points: CGFloat) {
-        coverFlowPanel?.scroll(by: points)
+    func scrollCoverFlow(by points: CGFloat, animated: Bool) {
+        coverFlowPanel?.scroll(by: points, animated: animated)
     }
 
     func snapCoverFlow() -> Int? {

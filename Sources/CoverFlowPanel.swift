@@ -32,6 +32,7 @@ final class CoverFlowPanel {
     private let stage = CALayer()
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
+    private let labelBackground = NSVisualEffectView()
     private var covers: [CALayer] = []
     private var currentKeys: [String] = []
     private var entries: [SwitchEntry] = []
@@ -40,12 +41,14 @@ final class CoverFlowPanel {
     private var hoveredIndex: Int?
     private var maxOffset = 1
     private var size: PanelSize = .medium
+    private var showsAppName = false
 
     private let padding: CGFloat = 20
     private let topInset: CGFloat = 26
     private let sideAngle: CGFloat = .pi / 3
     private let sideOpacity: Float = 0.8
     private let scrollPointsPerItem: CGFloat = 50
+    private let labelBackgroundRadius: CGFloat = 10
 
     private var coverSize: CGFloat { size.coverSize }
     private var centerGap: CGFloat { coverSize * 0.8 }
@@ -96,15 +99,22 @@ final class CoverFlowPanel {
         titleLabel.textColor = .labelColor
         subtitleLabel.textColor = .secondaryLabelColor
 
+        labelBackground.material = .popover
+        labelBackground.blendingMode = .behindWindow
+        labelBackground.state = .active
+        labelBackground.maskImage = SwitcherPanel.roundedMask(radius: labelBackgroundRadius)
+
         contentHost.addSubview(coverView)
+        contentHost.addSubview(labelBackground)
         contentHost.addSubview(titleLabel)
         contentHost.addSubview(subtitleLabel)
         container.addSubview(contentHost)
         panel.contentView = container
     }
 
-    func show(entries: [SwitchEntry], selectedIndex: Int, size: PanelSize) {
+    func show(entries: [SwitchEntry], selectedIndex: Int, size: PanelSize, showsAppName: Bool) {
         guard selectedIndex >= 0, selectedIndex < entries.count else { return }
+        self.showsAppName = showsAppName
         let wasVisible = panel.isVisible
         let keys = entries.map { $0.key }
         if keys != currentKeys || size != self.size {
@@ -261,6 +271,7 @@ final class CoverFlowPanel {
         subtitleLabel.frame = NSRect(x: padding, y: padding, width: labelWidth, height: subtitleHeight)
         titleLabel.font = .systemFont(ofSize: titleFontSize, weight: .semibold)
         titleLabel.frame = NSRect(x: padding, y: subtitleLabel.frame.maxY + 2, width: labelWidth, height: titleHeight)
+        layoutLabelBackground()
 
         maxOffset = max(1, Int((panelWidth / 2 - padding - centerGap - edge * 0.3) / sideSpacing) + 1)
 
@@ -281,11 +292,16 @@ final class CoverFlowPanel {
         CATransaction.commit()
     }
 
-    func scroll(by points: CGFloat) {
+    func scroll(by points: CGFloat, animated: Bool) {
         guard !covers.isEmpty else { return }
         position = min(max(position + points / scrollPointsPerItem, 0), CGFloat(covers.count - 1))
         CATransaction.begin()
-        CATransaction.setDisableActions(true)
+        if animated {
+            CATransaction.setAnimationDuration(0.18)
+            CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        } else {
+            CATransaction.setDisableActions(true)
+        }
         layoutCovers()
         CATransaction.commit()
     }
@@ -308,7 +324,20 @@ final class CoverFlowPanel {
         let entry = entries[selectedIndex]
         let appName = entry.app.localizedName ?? ""
         titleLabel.stringValue = entry.title
-        subtitleLabel.stringValue = appName == entry.title ? "" : appName
+        subtitleLabel.stringValue = !showsAppName || appName == entry.title ? "" : appName
+        layoutLabelBackground()
+    }
+
+    private func layoutLabelBackground() {
+        let hasSubtitle = !subtitleLabel.stringValue.isEmpty
+        let textWidth = max(
+            titleLabel.attributedStringValue.size().width,
+            hasSubtitle ? subtitleLabel.attributedStringValue.size().width : 0
+        )
+        let width = min(ceil(textWidth), titleLabel.frame.width) + 28
+        let bottom = (hasSubtitle ? subtitleLabel.frame.minY : titleLabel.frame.minY) - 6
+        let top = titleLabel.frame.maxY + 6
+        labelBackground.frame = NSRect(x: titleLabel.frame.midX - width / 2, y: bottom, width: width, height: top - bottom)
     }
 
     private func layoutCovers() {
