@@ -35,6 +35,7 @@ final class CoverFlowPanel {
     private let labelBackground = NSVisualEffectView()
     private var covers: [CALayer] = []
     private var coverSlots: [Int] = []
+    private var currentWindowDots: [CALayer] = []
     private var currentKeys: [String] = []
     private var entries: [SwitchEntry] = []
     private var selectedIndex = 0
@@ -43,11 +44,12 @@ final class CoverFlowPanel {
     private var maxOffset = 1
     private var size: PanelSize = .medium
     private var showsAppName = false
+    private var showsCurrentWindowDot = true
 
     private let padding: CGFloat = 20
     private let topInset: CGFloat = 26
     private let sideAngle: CGFloat = .pi / 3
-    private let sideOpacity: Float = 0.8
+    private var sideOpacity: Float = 0.8
     private let scrollPointsPerItem: CGFloat = 50
     private let labelBackgroundRadius: CGFloat = 10
 
@@ -114,9 +116,19 @@ final class CoverFlowPanel {
         panel.contentView = container
     }
 
-    func show(entries: [SwitchEntry], selectedIndex: Int, size: PanelSize, showsAppName: Bool, navigationStep: Int = 0) {
+    func show(
+        entries: [SwitchEntry],
+        selectedIndex: Int,
+        size: PanelSize,
+        showsAppName: Bool,
+        showsCurrentWindowDot: Bool,
+        sideOpacity: Float,
+        navigationStep: Int = 0
+    ) {
         guard selectedIndex >= 0, selectedIndex < entries.count else { return }
         self.showsAppName = showsAppName
+        self.showsCurrentWindowDot = showsCurrentWindowDot
+        self.sideOpacity = sideOpacity
         let wasVisible = panel.isVisible
         let keys = entries.map { $0.key }
         let needsRebuild = keys != currentKeys || size != self.size
@@ -182,6 +194,7 @@ final class CoverFlowPanel {
         let edge = coverSize
         var iconCache: [pid_t: NSImage] = [:]
         coverSlots = []
+        currentWindowDots = []
         covers = entries.enumerated().flatMap { index, entry in
             let pid = entry.app.processIdentifier
             let icon = iconCache[pid] ?? Self.fullResolutionIcon(for: entry.app)
@@ -212,6 +225,20 @@ final class CoverFlowPanel {
                 reflection.contentsScale = scale
                 reflection.contentsGravity = .resizeAspect
                 cover.addSublayer(reflection)
+
+                let dotSize = max(6, edge * 0.04)
+                let currentWindowDot = CALayer()
+                currentWindowDot.bounds = CGRect(x: 0, y: 0, width: dotSize, height: dotSize)
+                currentWindowDot.position = CGPoint(x: edge / 2, y: edge * 0.08)
+                currentWindowDot.backgroundColor = NSColor.controlAccentColor.cgColor
+                currentWindowDot.cornerRadius = dotSize / 2
+                currentWindowDot.shadowColor = NSColor.black.cgColor
+                currentWindowDot.shadowOpacity = 0.35
+                currentWindowDot.shadowRadius = 2
+                currentWindowDot.shadowOffset = CGSize(width: 0, height: -1)
+                currentWindowDot.opacity = 0
+                cover.addSublayer(currentWindowDot)
+                currentWindowDots.append(currentWindowDot)
 
                 stage.addSublayer(cover)
                 return cover
@@ -419,8 +446,6 @@ final class CoverFlowPanel {
                 CATransform3DMakeTranslation(0, 0, -edge * 0.45 * turn)
             )
             cover.transform = CATransform3DScale(transform, scale, scale, 1)
-            cover.sublayers?.first?.shadowOpacity = Float(emphasis) * 0.22
-            cover.zPosition = -distance * 0.01
             if shift != 0 {
                 CATransaction.commit()
             }
@@ -428,8 +453,29 @@ final class CoverFlowPanel {
 
         let mouse = coverView.convert(panel.mouseLocationOutsideOfEventStream, from: nil)
         hoveredIndex = coverView.bounds.contains(mouse) ? coverIndex(at: mouse) : nil
+        applyHighlights()
         applyOpacity()
         updateLabels(animated: panel.isVisible)
+    }
+
+    private func applyHighlights() {
+        let currentWindowCoverIndex = covers.indices
+            .filter { entryIndex(forSlot: coverSlots[$0]) == 0 }
+            .min {
+                abs(CGFloat(coverSlots[$0]) - position) < abs(CGFloat(coverSlots[$1]) - position)
+            }
+        for (index, cover) in covers.enumerated() {
+            let distance = abs(CGFloat(coverSlots[index]) - position)
+            let emphasis = 1 - min(distance, 1)
+            let isHovered = index == hoveredIndex
+            let iconLayer = cover.sublayers?.first
+            iconLayer?.transform = isHovered ? CATransform3DMakeScale(1.025, 1.025, 1) : CATransform3DIdentity
+            iconLayer?.shadowColor = NSColor.black.cgColor
+            iconLayer?.shadowRadius = coverSize * 0.06
+            iconLayer?.shadowOpacity = isHovered ? 0.26 : Float(emphasis) * 0.22
+            currentWindowDots[index].opacity = showsCurrentWindowDot && index == currentWindowCoverIndex ? 1 : 0
+            cover.zPosition = isHovered ? 0.02 : -distance * 0.01
+        }
     }
 
     private func applyOpacity() {
@@ -462,6 +508,7 @@ final class CoverFlowPanel {
         hoveredIndex = index
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.1)
+        applyHighlights()
         applyOpacity()
         CATransaction.commit()
         updateLabels(animated: panel.isVisible)

@@ -43,6 +43,8 @@ final class SwitcherPanel {
     var style: PanelStyle = .list
     var selectionAnimationEnabled = false
     var coverFlowShowsAppName = false
+    var coverFlowShowsCurrentWindowDot = true
+    var coverFlowSideOpacity: Float = 0.8
     private var coverFlowPanel: CoverFlowPanel?
 
     private let padding: CGFloat = 14
@@ -107,7 +109,15 @@ final class SwitcherPanel {
 
     func show(entries: [SwitchEntry], selectedIndex: Int, navigationStep: Int = 0) {
         if style == .coverFlow {
-            coverFlow().show(entries: entries, selectedIndex: selectedIndex, size: size, showsAppName: coverFlowShowsAppName, navigationStep: navigationStep)
+            coverFlow().show(
+                entries: entries,
+                selectedIndex: selectedIndex,
+                size: size,
+                showsAppName: coverFlowShowsAppName,
+                showsCurrentWindowDot: coverFlowShowsCurrentWindowDot,
+                sideOpacity: coverFlowSideOpacity,
+                navigationStep: navigationStep
+            )
             return
         }
 

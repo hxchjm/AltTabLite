@@ -1,6 +1,59 @@
 import AppKit
 import ApplicationServices
 
+enum CoverFlowScrollDirection: String, CaseIterable {
+    case system, reversed
+
+    var label: String {
+        switch self {
+        case .system: return "跟随系统"
+        case .reversed: return "反向"
+        }
+    }
+
+    var multiplier: CGFloat { self == .system ? 1 : -1 }
+}
+
+enum CoverFlowScrollSensitivity: String, CaseIterable {
+    case low, standard, high
+
+    var label: String {
+        switch self {
+        case .low: return "低"
+        case .standard: return "标准"
+        case .high: return "高"
+        }
+    }
+
+    var multiplier: CGFloat {
+        switch self {
+        case .low: return 0.7
+        case .standard: return 1
+        case .high: return 1.4
+        }
+    }
+}
+
+enum CoverFlowSnapDelay: String, CaseIterable {
+    case short, standard, long
+
+    var label: String {
+        switch self {
+        case .short: return "短"
+        case .standard: return "标准"
+        case .long: return "长"
+        }
+    }
+
+    var seconds: TimeInterval {
+        switch self {
+        case .short: return 0.08
+        case .standard: return 0.12
+        case .long: return 0.2
+        }
+    }
+}
+
 final class EventTapController {
     private let appList: AppListTracker
     private let panel: SwitcherPanel
@@ -12,6 +65,10 @@ final class EventTapController {
     private var sessionEntries: [SwitchEntry] = []
     private var selectedIndex = 0
     private var pendingSnap: DispatchWorkItem?
+
+    var coverFlowScrollDirection: CoverFlowScrollDirection = .system
+    var coverFlowScrollSensitivity: CoverFlowScrollSensitivity = .standard
+    var coverFlowSnapDelay: CoverFlowSnapDelay = .standard
 
     private let tabKeyCode: Int64 = 48
     private let escapeKeyCode: Int64 = 53
@@ -137,8 +194,10 @@ final class EventTapController {
         let delta = abs(dx) >= abs(dy) ? dx : dy
         if delta != 0 {
             // A wheel tick spans one cover (50 points), even when macOS reports only a small line delta.
-            let points: CGFloat = continuous ? CGFloat(delta) : (delta > 0 ? 50 : -50)
-            panel.scrollCoverFlow(by: points, animated: !continuous)
+            let basePoints: CGFloat = continuous
+                ? CGFloat(delta) * coverFlowScrollSensitivity.multiplier
+                : (delta > 0 ? 50 : -50)
+            panel.scrollCoverFlow(by: basePoints * coverFlowScrollDirection.multiplier, animated: !continuous)
             scheduleScrollSnap()
         }
         return nil
@@ -148,7 +207,7 @@ final class EventTapController {
         pendingSnap?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.snapScroll() }
         pendingSnap = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + coverFlowSnapDelay.seconds, execute: work)
     }
 
     private func snapScroll() {
