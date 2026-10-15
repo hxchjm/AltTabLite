@@ -92,6 +92,7 @@ final class CoverFlowPanel {
         coverView.onHover = { [weak self] point in self?.hover(at: point) }
 
         for label in [titleLabel, subtitleLabel] {
+            label.wantsLayer = true
             label.alignment = .center
             label.maximumNumberOfLines = 1
             label.lineBreakMode = .byTruncatingMiddle
@@ -125,7 +126,7 @@ final class CoverFlowPanel {
         self.entries = entries
         self.selectedIndex = selectedIndex
         position = CGFloat(selectedIndex)
-        updateLabels()
+        updateLabels(animated: wasVisible)
         relayout(count: entries.count, animated: wasVisible)
 
         if wasVisible {
@@ -152,6 +153,9 @@ final class CoverFlowPanel {
         panel.orderOut(nil)
         panel.alphaValue = 1
         container.layer?.transform = CATransform3DIdentity
+        for label in [titleLabel, subtitleLabel] {
+            label.layer?.removeAnimation(forKey: "transition")
+        }
         hoveredIndex = nil
     }
 
@@ -169,9 +173,17 @@ final class CoverFlowPanel {
 
             let cover = CALayer()
             cover.bounds = CGRect(x: 0, y: 0, width: edge, height: edge)
-            cover.contents = Self.rasterize(icon, edge: edge, scale: scale)
-            cover.contentsScale = scale
-            cover.contentsGravity = .resizeAspect
+
+            // Isolate the icon so its shadow does not include the reflection.
+            let iconLayer = CALayer()
+            iconLayer.frame = cover.bounds
+            iconLayer.contents = Self.rasterize(icon, edge: edge, scale: scale)
+            iconLayer.contentsScale = scale
+            iconLayer.contentsGravity = .resizeAspect
+            iconLayer.shadowColor = NSColor.black.cgColor
+            iconLayer.shadowRadius = edge * 0.06
+            iconLayer.shadowOffset = CGSize(width: 0, height: -edge * 0.025)
+            cover.addSublayer(iconLayer)
 
             // Pulled up slightly so the mirror meets the icon shape instead of its transparent margin.
             let reflection = CALayer()
@@ -186,7 +198,7 @@ final class CoverFlowPanel {
         }
         if let first = entries.first, let icon = iconCache[first.app.processIdentifier] {
             let largest = icon.representations.map { $0.pixelsWide }.max() ?? 0
-            let rendered = (covers.first?.contents as! CGImage?)?.width ?? 0
+            let rendered = (covers.first?.sublayers?.first?.contents as! CGImage?)?.width ?? 0
             log("cover flow icons: \(first.app.localizedName ?? "?") source max \(largest)px, rendered \(rendered)px for \(Int(edge))pt @\(scale)x")
         }
         CATransaction.commit()
@@ -310,7 +322,7 @@ final class CoverFlowPanel {
         let index = Int(position.rounded())
         position = CGFloat(index)
         selectedIndex = index
-        updateLabels()
+        updateLabels(animated: panel.isVisible)
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.2)
         CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
@@ -319,12 +331,24 @@ final class CoverFlowPanel {
         return index
     }
 
-    private func updateLabels() {
+    private func updateLabels(animated: Bool) {
         guard selectedIndex >= 0, selectedIndex < entries.count else { return }
         let entry = entries[selectedIndex]
         let appName = entry.app.localizedName ?? ""
-        titleLabel.stringValue = entry.title
-        subtitleLabel.stringValue = !showsAppName || appName == entry.title ? "" : appName
+        let subtitle = !showsAppName || appName == entry.title ? "" : appName
+        for (label, text) in [(titleLabel, entry.title), (subtitleLabel, subtitle)] {
+            if animated, label.stringValue != text {
+                label.displayIfNeeded()
+                let transition = CATransition()
+                transition.type = .fade
+                transition.duration = 0.12
+                transition.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                label.layer?.add(transition, forKey: "transition")
+            } else if !animated {
+                label.layer?.removeAnimation(forKey: "transition")
+            }
+            label.stringValue = text
+        }
         layoutLabelBackground()
     }
 
@@ -351,12 +375,16 @@ final class CoverFlowPanel {
                 ? offset * centerGap
                 : direction * (centerGap + (distance - 1) * sideSpacing)
             let turn = min(distance, 1)
+            let emphasis = 1 - turn
+            let scale = 1 + emphasis * 0.06
             cover.position = CGPoint(x: midX + x, y: edge / 2)
             // Side covers turn their faces toward the center, tucking the inner edge back.
-            cover.transform = CATransform3DConcat(
+            let transform = CATransform3DConcat(
                 CATransform3DMakeRotation(-direction * sideAngle * turn, 0, 1, 0),
                 CATransform3DMakeTranslation(0, 0, -edge * 0.45 * turn)
             )
+            cover.transform = CATransform3DScale(transform, scale, scale, 1)
+            cover.sublayers?.first?.shadowOpacity = Float(emphasis) * 0.22
             cover.zPosition = -distance * 0.01
         }
 
