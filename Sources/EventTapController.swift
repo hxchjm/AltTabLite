@@ -11,11 +11,14 @@ final class EventTapController {
     private var sessionActive = false
     private var sessionEntries: [SwitchEntry] = []
     private var selectedIndex = 0
+    private var pendingSnap: DispatchWorkItem?
 
     private let tabKeyCode: Int64 = 48
     private let escapeKeyCode: Int64 = 53
     private let upArrowKeyCode: Int64 = 126
     private let downArrowKeyCode: Int64 = 125
+    private let leftArrowKeyCode: Int64 = 123
+    private let rightArrowKeyCode: Int64 = 124
 
     init(appList: AppListTracker, panel: SwitcherPanel) {
         self.appList = appList
@@ -29,7 +32,8 @@ final class EventTapController {
         let mask: CGEventMask =
             CGEventMask(1 << CGEventType.keyDown.rawValue) |
             CGEventMask(1 << CGEventType.keyUp.rawValue) |
-            CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+            CGEventMask(1 << CGEventType.flagsChanged.rawValue) |
+            CGEventMask(1 << CGEventType.scrollWheel.rawValue)
 
         let info = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
@@ -71,6 +75,8 @@ final class EventTapController {
             return handleKeyUp(event)
         case .flagsChanged:
             return handleFlagsChanged(event)
+        case .scrollWheel:
+            return handleScroll(event)
         default:
             return Unmanaged.passUnretained(event)
         }
@@ -100,6 +106,11 @@ final class EventTapController {
             return nil
         }
 
+        if sessionActive, panel.style == .coverFlow, keyCode == leftArrowKeyCode || keyCode == rightArrowKeyCode {
+            advance(backwards: keyCode == leftArrowKeyCode)
+            return nil
+        }
+
         return Unmanaged.passUnretained(event)
     }
 
@@ -118,6 +129,34 @@ final class EventTapController {
         return Unmanaged.passUnretained(event)
     }
 
+    private func handleScroll(_ event: CGEvent) -> Unmanaged<CGEvent>? {
+        guard sessionActive, panel.style == .coverFlow else { return Unmanaged.passUnretained(event) }
+        let dx = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis2)
+        let dy = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
+        if dx != 0, abs(dx) >= abs(dy) {
+            // Content follows the fingers: swiping left brings later covers to the center.
+            panel.scrollCoverFlow(by: -CGFloat(dx))
+            scheduleScrollSnap()
+        }
+        return nil
+    }
+
+    private func scheduleScrollSnap() {
+        pendingSnap?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.snapScroll() }
+        pendingSnap = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+
+    private func snapScroll() {
+        guard pendingSnap != nil else { return }
+        pendingSnap?.cancel()
+        pendingSnap = nil
+        guard sessionActive, let index = panel.snapCoverFlow() else { return }
+        selectedIndex = index
+        log("scroll snap: index \(index)")
+    }
+
     private func beginSession(backwards: Bool) {
         let apps = appList.orderedApplications()
         let startedAt = DispatchTime.now()
@@ -134,6 +173,8 @@ final class EventTapController {
 
     private func advance(backwards: Bool) {
         guard !sessionEntries.isEmpty else { return }
+        pendingSnap?.cancel()
+        pendingSnap = nil
         let count = sessionEntries.count
         selectedIndex = backwards ? (selectedIndex - 1 + count) % count : (selectedIndex + 1) % count
         panel.show(entries: sessionEntries, selectedIndex: selectedIndex)
@@ -141,12 +182,19 @@ final class EventTapController {
 
     private func commitFromUI(_ index: Int) {
         guard sessionActive, index >= 0, index < sessionEntries.count else { return }
+        pendingSnap?.cancel()
+        pendingSnap = nil
         selectedIndex = index
         log("ui pick: index \(index)")
         endSession(cancel: false)
     }
 
     private func endSession(cancel: Bool) {
+        if !cancel {
+            snapScroll()
+        }
+        pendingSnap?.cancel()
+        pendingSnap = nil
         let entries = sessionEntries
         let index = selectedIndex
         sessionActive = false

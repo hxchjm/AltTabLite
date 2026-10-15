@@ -40,7 +40,9 @@ final class SwitcherPanel {
     private var currentKeys: [String] = []
 
     var size: PanelSize = .medium
+    var style: PanelStyle = .list
     var selectionAnimationEnabled = false
+    private var coverFlowPanel: CoverFlowPanel?
 
     private let padding: CGFloat = 14
     private let gap: CGFloat = 1
@@ -103,6 +105,11 @@ final class SwitcherPanel {
     }
 
     func show(entries: [SwitchEntry], selectedIndex: Int) {
+        if style == .coverFlow {
+            coverFlow().show(entries: entries, selectedIndex: selectedIndex, size: size)
+            return
+        }
+
         let wasVisible = panel.isVisible
         let keys = entries.map { $0.key }
         if keys != currentKeys {
@@ -135,9 +142,28 @@ final class SwitcherPanel {
     }
 
     func hide() {
+        coverFlowPanel?.hide()
         panel.orderOut(nil)
         panel.alphaValue = 1
         container.layer?.transform = CATransform3DIdentity
+    }
+
+    func scrollCoverFlow(by points: CGFloat) {
+        coverFlowPanel?.scroll(by: points)
+    }
+
+    func snapCoverFlow() -> Int? {
+        coverFlowPanel?.snap()
+    }
+
+    private func coverFlow() -> CoverFlowPanel {
+        if let coverFlowPanel {
+            return coverFlowPanel
+        }
+        let created = CoverFlowPanel()
+        created.onPick = { [weak self] index in self?.onPick?(index) }
+        coverFlowPanel = created
+        return created
     }
 
     private func rebuildRows(_ entries: [SwitchEntry]) {
