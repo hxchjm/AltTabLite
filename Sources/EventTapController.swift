@@ -137,7 +137,7 @@ final class EventTapController {
         let delta = abs(dx) >= abs(dy) ? dx : dy
         if delta != 0 {
             // A wheel tick spans one cover (50 points), even when macOS reports only a small line delta.
-            let points: CGFloat = continuous ? -CGFloat(delta) : (delta > 0 ? -50 : 50)
+            let points: CGFloat = continuous ? CGFloat(delta) : (delta > 0 ? 50 : -50)
             panel.scrollCoverFlow(by: points, animated: !continuous)
             scheduleScrollSnap()
         }
@@ -180,7 +180,7 @@ final class EventTapController {
         pendingSnap = nil
         let count = sessionEntries.count
         selectedIndex = backwards ? (selectedIndex - 1 + count) % count : (selectedIndex + 1) % count
-        panel.show(entries: sessionEntries, selectedIndex: selectedIndex)
+        panel.show(entries: sessionEntries, selectedIndex: selectedIndex, navigationStep: backwards ? -1 : 1)
     }
 
     private func commitFromUI(_ index: Int) {

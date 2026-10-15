@@ -105,9 +105,9 @@ final class SwitcherPanel {
         return image
     }
 
-    func show(entries: [SwitchEntry], selectedIndex: Int) {
+    func show(entries: [SwitchEntry], selectedIndex: Int, navigationStep: Int = 0) {
         if style == .coverFlow {
-            coverFlow().show(entries: entries, selectedIndex: selectedIndex, size: size, showsAppName: coverFlowShowsAppName)
+            coverFlow().show(entries: entries, selectedIndex: selectedIndex, size: size, showsAppName: coverFlowShowsAppName, navigationStep: navigationStep)
             return
         }
 
