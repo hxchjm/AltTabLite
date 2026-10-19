@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP_NAME="AltTabLite"
-APP_DIR="build/$APP_NAME.app"
+APP_DIR="${BUILD_DIR:-build}/$APP_NAME.app"
 BINARY="$APP_DIR/Contents/MacOS/$APP_NAME"
 
 rm -rf "$APP_DIR"
