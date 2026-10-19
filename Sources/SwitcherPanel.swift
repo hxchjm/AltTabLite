@@ -206,7 +206,7 @@ final class SwitcherPanel {
             return max(width, measured)
         }
         let contentWidth = padding * 2 + 10 + iconSize + iconGap + widestTitle + 10
-        let panelWidth = min(max(contentWidth, 360), visible.width * 0.6)
+        let panelWidth = min(max(contentWidth, 360), visible.width * 0.4)
 
         let maxPanelHeight = visible.height * 0.85
         let rowsThatFit = max(1, Int((maxPanelHeight - padding * 2 + gap) / (rowHeight + gap)))
