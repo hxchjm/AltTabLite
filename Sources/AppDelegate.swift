@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var appList: AppListTracker!
     private var panel: SwitcherPanel!
     private var tapController: EventTapController!
@@ -68,6 +68,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.button?.title = "AT"
         }
         let menu = NSMenu()
+        menu.delegate = self
+
+        let panelItem = NSMenuItem(title: "显示面板", action: #selector(togglePanel(_:)), keyEquivalent: "")
+        panelItem.target = self
+        menu.addItem(panelItem)
+        menu.addItem(NSMenuItem.separator())
 
         let styleItem = NSMenuItem(title: "显示样式", action: nil, keyEquivalent: "")
         let styleMenu = NSMenu()
@@ -185,6 +191,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "退出 AltTabLite", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.menu = menu
         statusItem = item
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.items.first { $0.action == #selector(togglePanel(_:)) }?.title = tapController.isPanelVisible ? "隐藏面板" : "显示面板"
+    }
+
+    @objc private func togglePanel(_ sender: NSMenuItem) {
+        tapController.togglePanel()
     }
 
     @objc private func selectPanelStyle(_ sender: NSMenuItem) {

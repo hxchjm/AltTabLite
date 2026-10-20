@@ -62,9 +62,12 @@ final class EventTapController {
     private var runLoopSource: CFRunLoopSource?
 
     private var sessionActive = false
+    private var sessionOpenedManually = false
     private var sessionEntries: [SwitchEntry] = []
     private var selectedIndex = 0
     private var pendingSnap: DispatchWorkItem?
+
+    var isPanelVisible: Bool { sessionActive }
 
     var coverFlowScrollDirection: CoverFlowScrollDirection = .system
     var coverFlowScrollSensitivity: CoverFlowScrollSensitivity = .standard
@@ -81,6 +84,14 @@ final class EventTapController {
         self.appList = appList
         self.panel = panel
         panel.onPick = { [weak self] index in self?.commitFromUI(index) }
+    }
+
+    func togglePanel() {
+        if sessionActive {
+            endSession(cancel: true)
+        } else {
+            beginSession(backwards: false, manually: true)
+        }
     }
 
     func start() -> Bool {
@@ -146,6 +157,7 @@ final class EventTapController {
         if keyCode == tabKeyCode, flags.contains(.maskAlternate) {
             let backwards = flags.contains(.maskShift)
             if sessionActive {
+                sessionOpenedManually = false
                 advance(backwards: backwards)
             } else {
                 beginSession(backwards: backwards)
@@ -156,6 +168,10 @@ final class EventTapController {
         if keyCode == escapeKeyCode, sessionActive {
             endSession(cancel: true)
             return nil
+        }
+
+        if sessionOpenedManually {
+            return Unmanaged.passUnretained(event)
         }
 
         if sessionActive, keyCode == upArrowKeyCode || keyCode == downArrowKeyCode {
@@ -173,21 +189,21 @@ final class EventTapController {
 
     private func handleKeyUp(_ event: CGEvent) -> Unmanaged<CGEvent>? {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        if keyCode == tabKeyCode, sessionActive || event.flags.contains(.maskAlternate) {
+        if keyCode == tabKeyCode, (sessionActive && !sessionOpenedManually) || event.flags.contains(.maskAlternate) {
             return nil
         }
         return Unmanaged.passUnretained(event)
     }
 
     private func handleFlagsChanged(_ event: CGEvent) -> Unmanaged<CGEvent>? {
-        if sessionActive, !event.flags.contains(.maskAlternate) {
+        if sessionActive, !sessionOpenedManually, !event.flags.contains(.maskAlternate) {
             endSession(cancel: false)
         }
         return Unmanaged.passUnretained(event)
     }
 
     private func handleScroll(_ event: CGEvent) -> Unmanaged<CGEvent>? {
-        guard sessionActive, panel.style == .coverFlow else { return Unmanaged.passUnretained(event) }
+        guard sessionActive, !sessionOpenedManually, panel.style == .coverFlow else { return Unmanaged.passUnretained(event) }
         let continuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
         let dx = event.getDoubleValueField(continuous ? .scrollWheelEventPointDeltaAxis2 : .scrollWheelEventDeltaAxis2)
         let dy = event.getDoubleValueField(continuous ? .scrollWheelEventPointDeltaAxis1 : .scrollWheelEventDeltaAxis1)
@@ -219,17 +235,18 @@ final class EventTapController {
         log("scroll snap: index \(index)")
     }
 
-    private func beginSession(backwards: Bool) {
+    private func beginSession(backwards: Bool, manually: Bool = false) {
         let apps = appList.orderedApplications()
         let startedAt = DispatchTime.now()
         let entries = WindowEnumerator.entries(for: apps)
         let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - startedAt.uptimeNanoseconds) / 1_000_000
         log(String(format: "session begin (apps: %d, entries: %d, %.1fms, backwards: %@)", apps.count, entries.count, elapsedMs, backwards ? "true" : "false"))
         log("entry titles: \(entries.prefix(24).map { $0.title.prefix(48) }.joined(separator: " | "))")
-        guard entries.count > 1 else { return }
+        guard !entries.isEmpty, manually || entries.count > 1 else { return }
         sessionActive = true
+        sessionOpenedManually = manually
         sessionEntries = entries
-        selectedIndex = backwards ? entries.count - 1 : 1
+        selectedIndex = manually ? 0 : (backwards ? entries.count - 1 : 1)
         panel.show(entries: entries, selectedIndex: selectedIndex)
     }
 
@@ -260,6 +277,7 @@ final class EventTapController {
         let entries = sessionEntries
         let index = selectedIndex
         sessionActive = false
+        sessionOpenedManually = false
         sessionEntries = []
         selectedIndex = 0
         panel.hide()

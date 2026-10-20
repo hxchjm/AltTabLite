@@ -1,38 +1,40 @@
 # AltTabLite
 
-轻量的 macOS Windows 式 Alt+Tab 窗口切换器，支持列表与 Cover Flow 两种样式。
+A lightweight, Windows-style Alt+Tab window switcher for macOS, with List and Cover Flow layouts.
 
-要求 macOS 13 或更高版本。
+![AltTabLite in Cover Flow mode](assets/cover-flow.png)
 
-## 安装
+Requires macOS 13 or later. The current prebuilt release supports Apple Silicon (arm64) only.
 
-1. 从 [Releases](https://github.com/hxchjm/AltTabLite/releases) 下载 `AltTabLite-<版本>.zip` 和对应的 `.sha256` 文件。
-2. （可选）校验下载文件：
+## Installation
+
+1. Download `AltTabLite-<version>.zip` and its matching `.sha256` file from [Releases](https://github.com/hxchjm/AltTabLite/releases).
+2. Optionally verify the download from the directory containing both files (replace `<version>` with the actual version):
    ```bash
-   shasum -a 256 -c AltTabLite-<版本>.zip.sha256
+   shasum -a 256 -c AltTabLite-<version>.zip.sha256
    ```
-3. 解压后把 `AltTabLite.app` 拖到「应用程序」文件夹。
-4. 首次打开。本应用采用临时签名（ad-hoc），未经 Apple 公证，macOS 会提示无法验证开发者：
-   - macOS 15 及以上：先双击打开一次并关闭提示，然后在「系统设置 → 隐私与安全性」底部点「仍要打开」，输入密码确认。
-   - macOS 13–14：在 Finder 中右键应用 →「打开」→ 再点「打开」。
-5. 在「系统设置 → 隐私与安全性 → 辅助功能」中允许 AltTabLite，用于监听快捷键和切换窗口。
+3. Unzip the archive and drag `AltTabLite.app` into your Applications folder.
+4. Open the app for the first time. It is ad-hoc signed and **not notarized by Apple**, so macOS may display a warning that the developer cannot be verified:
+   - **macOS 15 and later:** Double-click the app once and dismiss the warning. Then go to **System Settings → Privacy & Security**, click **Open Anyway**, and authenticate when prompted.
+   - **macOS 13–14:** Right-click the app in Finder, choose **Open**, and confirm by clicking **Open** again.
+5. Allow AltTabLite in **System Settings → Privacy & Security → Accessibility** so it can listen for shortcuts and switch windows.
 
-如果以上方式无效，可以自行移除下载隔离属性（请确认安装包来自本仓库的 Releases）：
+If these steps do not work, you can manually remove the download quarantine attribute. Only do this after confirming that the app came from this repository's Releases and that you trust it:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/AltTabLite.app
 ```
 
-## 更新
+## Updating
 
-用新版本替换 `/Applications/AltTabLite.app`。由于临时签名在每次构建时都会变化，更新后通常需要重新授权：
+Quit AltTabLite, then replace `/Applications/AltTabLite.app` with the new version. Because the ad-hoc signature changes with each build, you may need to grant Accessibility permission again:
 
-1. 在「系统设置 → 隐私与安全性 → 辅助功能」中选中 AltTabLite，点「−」删除。
-2. 重新打开 AltTabLite，按提示再次允许。
+1. In **System Settings → Privacy & Security → Accessibility**, select AltTabLite and click **−** to remove it.
+2. Reopen AltTabLite and grant permission again when prompted.
 
-## 从源码构建
+## Building from Source
 
-需要 Xcode 或 Command Line Tools（`xcode-select --install`）。
+Install Xcode or the Command Line Tools (`xcode-select --install`).
 
 ```bash
 git clone https://github.com/hxchjm/AltTabLite.git
@@ -41,12 +43,12 @@ CODE_SIGN_IDENTITY="-" ./build.sh
 open build/AltTabLite.app
 ```
 
-`build.sh` 默认使用名为 `AltTabLite Dev` 的本地签名证书；使用固定的本地证书可以避免每次重新构建后都要重新授权辅助功能。
+By default, `build.sh` uses a local signing certificate named `AltTabLite Dev`. Using a stable local certificate can help preserve Accessibility permission across development builds. Set `CODE_SIGN_IDENTITY="-"` to use ad-hoc signing instead.
 
-## 发布
+## Release Packaging
 
 ```bash
 ./release.sh
 ```
 
-脚本会以临时签名构建应用，在 `dist/` 下生成 `AltTabLite-<版本>.zip` 和 `.sha256` 校验文件，把这两个文件上传到 GitHub Releases 即可。版本号来自 `Info.plist` 的 `CFBundleShortVersionString`。
+The script builds an ad-hoc signed app and creates `AltTabLite-<version>.zip` and its `.sha256` checksum file in `dist/`. Upload both files to GitHub Releases. The version is read from `CFBundleShortVersionString` in `Info.plist`.
